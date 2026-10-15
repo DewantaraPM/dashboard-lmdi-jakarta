@@ -43,6 +43,10 @@ df["E_Gas_TJ"] = df["C_Gas"] / df["EF_Gas_TJ"]
 df["E_Total_TJ"] = df["E_Listrik_TJ"] + df["E_LPG_TJ"] + df["E_Gas_TJ"]
 df["C_Total_Gg"] = df["C_Listrik"] + df["C_LPG"] + df["C_Gas"]
 
+def fmt_id(x, d=1):
+    """Format angka gaya Indonesia: 1.234,5"""
+    return f"{x:,.{d}f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
 # ==========================================
 # 2. FUNGSI PERHITUNGAN LMDI ADITIF (ANG 2005, 2015)
 # ==========================================
@@ -115,13 +119,18 @@ with st.sidebar:
 # 4. HEADER & KARTU METRIK UTAMA (KPI CARDS)
 # ==========================================
 st.title("🌿 Dashboard Dekomposisi LMDI & Simulator Mitigasi GRK DKI Jakarta")
-st.markdown("**Sistem Pendukung KeputusanAnalisis Faktor Pendorong Historis (2010–2024) dan Evaluasi Skenario Dekarbonisasi Rumah Tangga (2025–2050)**")
+st.markdown("**Sistem Pendukung Keputusan: Analisis Faktor Pendorong Historis (2010–2024) dan Evaluasi Skenario Dekarbonisasi Rumah Tangga (2025–2050)**")
+
+_r10, _r24 = df[df["Tahun"] == 2010].iloc[0], df[df["Tahun"] == 2024].iloc[0]
+_growth = (_r24["C_Total_Gg"] / _r10["C_Total_Gg"] - 1) * 100
+_porsi_listrik = _r24["C_Listrik"] / _r24["C_Total_Gg"] * 100
+_chg_int = (_r24["Intensitas_DKI"] / _r10["Intensitas_DKI"] - 1) * 100
 
 kpi1, kpi2, kpi3, kpi4 = st.columns(4)
-kpi1.metric("Total Emisi RT (2024)", "16.180 Gg CO₂e", "+89,4% dari 2010", delta_color="inverse")
-kpi2.metric("Porsi Emisi Listrik RT (2024)", "91,6%", "14.828 Gg CO₂e (Indirect)", delta_color="off")
-kpi3.metric("Intensitas Emisi Ekonomi DKI", "30,14 tCO₂e/Miliar Rp", "-19,7% dari 2010 (37,53)", delta_color="normal")
-kpi4.metric("Target Reduksi RT (2030)", "3.630 Gg CO₂e", "Program Labelling & Efisiensi", delta_color="normal")
+kpi1.metric("Total Emisi RT (2024)", f"{fmt_id(_r24['C_Total_Gg'], 0)} Gg CO₂e", f"{_growth:+.1f}% dari 2010".replace(".", ","), delta_color="inverse")
+kpi2.metric("Porsi Emisi Listrik RT (2024)", f"{fmt_id(_porsi_listrik, 1)}%", f"{fmt_id(_r24['C_Listrik'], 0)} Gg CO₂e (Indirect)", delta_color="off")
+kpi3.metric("Intensitas Emisi Ekonomi DKI (seluruh sektor)", f"{fmt_id(_r24['Intensitas_DKI'], 2)} tCO₂e/Miliar Rp", f"{_chg_int:+.1f}% dari 2010 ({fmt_id(_r10['Intensitas_DKI'], 2)})".replace(".", ","), delta_color="inverse")
+kpi4.metric("Reduksi Program Labelling 2030 (Target DLH)", "3.630 Gg CO₂e", "Belum termasuk efek dekarbonisasi grid", delta_color="off")
 
 st.divider()
 
@@ -285,31 +294,46 @@ with tab3:
     st.subheader("Uji Kepekaan: PDRB Harga Konstan vs. Harga Berlaku & Efek Tahun Pandemi 2020")
     st.markdown("Sesuai **Prosedur Penelitian No. 6**, bagian ini membandingkan hasil dekomposisi menggunakan **PDRB Harga Konstan (2010)** dan **PDRB Harga Berlaku** (Tanoto dan Praptiningsih 2013), serta mengevaluasi dampak anomali pandemi 2020.")
     
-    k_2010_2024 = hitung_lmdi(df, 2010, 2024, "PDRB_Konstan_T")
-    b_2010_2024 = hitung_lmdi(df, 2010, 2024, "PDRB_Berlaku_T")
-    
-    # Akumulasi rantai tahunan tanpa transisi pandemi 2019-2020
-    chain_konstan_no2020 = [hitung_lmdi(df, y, y+1, "PDRB_Konstan_T") for y in range(2010, 2024) if y != 2019]
-    df_no2020 = pd.DataFrame(chain_konstan_no2020)
-    
-    df_sens = pd.DataFrame([
-        {"Skenario Uji Kepekaan": "1. Basis PDRB Harga Konstan (2010–2024 Penuh)", **k_2010_2024},
-        {"Skenario Uji Kepekaan": "2. Basis PDRB Harga Berlaku (2010–2024 Penuh)", **b_2010_2024},
-        {
-            "Skenario Uji Kepekaan": "3. Basis PDRB Harga Konstan (Tanpa Transisi Pandemi 2019–2020)",
-            "Periode": "2010–2024 (Excl. 2019–2020)",
-            "Perubahan Total (ΔC)": round(df_no2020["Perubahan Total (ΔC)"].sum(), 2),
-            "Efek Penduduk (ΔC_pop)": round(df_no2020["Efek Penduduk (ΔC_pop)"].sum(), 2),
-            "Efek Kemakmuran (ΔC_aff)": round(df_no2020["Efek Kemakmuran (ΔC_aff)"].sum(), 2),
-            "Efek Intensitas Energi (ΔC_int)": round(df_no2020["Efek Intensitas Energi (ΔC_int)"].sum(), 2),
-            "Efek Bauran Energi (ΔC_mix)": round(df_no2020["Efek Bauran Energi (ΔC_mix)"].sum(), 2),
-            "Efek Faktor Emisi (ΔC_ef)": round(df_no2020["Efek Faktor Emisi (ΔC_ef)"].sum(), 2),
-            "Residual": 0.0
+    efek_cols = [
+        "Perubahan Total (ΔC)", "Efek Penduduk (ΔC_pop)", "Efek Kemakmuran (ΔC_aff)",
+        "Efek Intensitas Energi (ΔC_int)", "Efek Bauran Energi (ΔC_mix)", "Efek Faktor Emisi (ΔC_ef)"
+    ]
+
+    def baris_langsung(label, basis):
+        h = hitung_lmdi(df, 2010, 2024, basis)
+        return {"Skenario Uji Kepekaan": label, **{k: h[k] for k in efek_cols}, "Residual": h["Residual"]}
+
+    def baris_rantai(label, basis, kecualikan=None):
+        daftar = [hitung_lmdi(df, y, y + 1, basis) for y in range(2010, 2024) if y != kecualikan]
+        d = pd.DataFrame(daftar)
+        return {
+            "Skenario Uji Kepekaan": label,
+            **{k: round(d[k].sum(), 2) for k in efek_cols},
+            "Residual": round(d["Residual"].sum(), 4)   # dihitung, bukan diketik manual
         }
-    ]).drop(columns=["Periode"])
-    
+
+    sk1 = baris_langsung("A1. Langsung 2010→2024 | PDRB Harga Konstan", "PDRB_Konstan_T")
+    sk2 = baris_langsung("A2. Langsung 2010→2024 | PDRB Harga Berlaku", "PDRB_Berlaku_T")
+    sk3 = baris_rantai("B1. Berantai tahunan 2010–2024 | PDRB Konstan (penuh)", "PDRB_Konstan_T")
+    sk4 = baris_rantai("B2. Berantai tahunan | PDRB Konstan, tanpa transisi 2019–2020", "PDRB_Konstan_T", kecualikan=2019)
+    df_sens = pd.DataFrame([sk1, sk2, sk3, sk4])
+
     st.dataframe(df_sens.style.format(precision=2), use_container_width=True)
-    st.info("💡 **Interpretasi Kunci untuk Bab 4:** Penggunaan PDRB Harga Berlaku memperbesar nilai positif Efek Kemakmuran (ΔC_aff) dan nilai negatif Efek Intensitas Energi (ΔC_int) secara semu akibat terikutnya komponen inflasi harga pada PDRB Berlaku. Selain itu, jika tahun pandemi 2019–2020 dikeluarkan, efek penghematan intensitas energi (ΔC_int) menjadi jauh lebih kuat (-2.574,2 Gg CO₂e vs. -1.652,9 Gg CO₂e) karena pada tahun 2020 terjadi lonjakan konsumsi listrik di dalam rumah (WFH) saat PDRB turun.")
+    st.caption("Perbandingan yang setara: **A1 vs A2** (efek basis PDRB, metode sama) dan **B1 vs B2** (efek pandemi, metode sama). A dan B tidak dibandingkan langsung karena dekomposisi langsung dan berantai memang menghasilkan pembagian efek yang berbeda.")
+
+    kI = "Efek Intensitas Energi (ΔC_int)"
+    kA = "Efek Kemakmuran (ΔC_aff)"
+    arah_pandemi = "lebih kuat" if sk4[kI] < sk3[kI] else "lebih lemah"
+    st.info(
+        "💡 **Interpretasi (angka dihitung otomatis dari tabel di atas):**\n\n"
+        f"- **Basis PDRB (A1 vs A2):** dengan PDRB Harga Berlaku, Efek Kemakmuran berubah dari {fmt_id(sk1[kA])} menjadi {fmt_id(sk2[kA])} Gg CO₂e "
+        f"dan Efek Intensitas Energi dari {fmt_id(sk1[kI])} menjadi {fmt_id(sk2[kI])} Gg CO₂e. "
+        "Pembesaran kedua efek ini konsisten dengan masuknya komponen inflasi harga pada PDRB Berlaku, sehingga PDRB Konstan lebih sesuai sebagai basis utama.\n"
+        f"- **Pandemi (B1 vs B2):** jika transisi 2019–2020 dikeluarkan, Efek Intensitas Energi menjadi {arah_pandemi} "
+        f"({fmt_id(sk3[kI])} → {fmt_id(sk4[kI])} Gg CO₂e). "
+        "Dugaan penyebabnya: pada 2020 konsumsi listrik rumah tangga naik saat PDRB turun (kemungkinan efek WFH). "
+        "Ini masih dugaan dan perlu didukung data atau referensi sebelum ditulis sebagai kesimpulan."
+    )
 
 # --- TAB 4: KALKULATOR SIMULASI 2025-2050 ---
 with tab4:
@@ -330,7 +354,7 @@ with tab4:
         with sub_c1:
             tahun_proj = [2024, 2025, 2026, 2027, 2028, 2029, 2030]
             target_labelling_dlh = [0, 2442, 2610, 2814, 3054, 3329, 3630]
-            c_2024 = 16180.0
+            c_2024 = float(df.loc[df["Tahun"] == 2024, "C_Total_Gg"].iloc[0])
             bau_vals, skenario_vals = [], []
             for idx, _ in enumerate(tahun_proj):
                 if idx == 0:
@@ -365,11 +389,14 @@ with tab4:
             sim_nze = [13953.0]
             for i in range(1, len(thn_nze)):
                 gap_mitigasi = cpos_dlh[i] - nze_dlh[i]
-                emisi_tercapai = cpos_dlh[i] - (gap_mitigasi * (capai_plts_nze / 100.0))
-                # Tambahan efek dekarbonisasi grid listrik
-                emisi_tercapai = emisi_tercapai * (1 - (reduksi_ef_grid / 100.0) * 0.5)
-                sim_nze.append(max(0, emisi_tercapai))
-                
+                reduksi_target = gap_mitigasi * (capai_plts_nze / 100.0)
+                # Dekarbonisasi grid dihitung sebagai bagian dari upaya menutup gap CPOS -> NZE
+                # (target NZE sudah mengandung dekarbonisasi grid), bukan tambahan di atas NZE.
+                reduksi_grid = cpos_dlh[i] * (reduksi_ef_grid / 100.0) * 0.5
+                batas_reduksi = max(gap_mitigasi, reduksi_target)   # tidak melampaui NZE kecuali realisasi > 100%
+                reduksi_total = min(reduksi_target + reduksi_grid, batas_reduksi)
+                sim_nze.append(max(0, cpos_dlh[i] - reduksi_total))
+
             df_sim50 = pd.DataFrame({
                 "Tahun": thn_nze,
                 "Skenario CPOS (DLH)": cpos_dlh,
@@ -387,8 +414,12 @@ with tab4:
         reduksi_2030 = bau_vals[-1] - skenario_vals[-1]
         persen_red_2030 = (reduksi_2030 / bau_vals[-1]) * 100
         residu_2050 = sim_nze[-1]
+        if residu_2050 <= nze_dlh[-1] + 0.5:
+            ket_2050 = "target NZE DLH tercapai (sisa emisi residu tetap perlu mekanisme *carbon offset*)."
+        else:
+            ket_2050 = f"masih **{fmt_id(residu_2050 - nze_dlh[-1], 0)} Gg CO₂e** di atas target NZE DLH ({fmt_id(nze_dlh[-1], 0)} Gg CO₂e)."
         st.success(
             f"**Ringkasan Hasil Simulasi:**\n"
-            f"- **Tahun 2030:** Reduksi emisi sektor rumah tangga mencapai **{reduksi_2030:,.0f} Gg CO₂e** (**{persen_red_2030:.1f}%** di bawah Baseline 2030).\n"
-            f"- **Tahun 2050:** Tingkat emisi rumah tangga berada pada **{residu_2050:,.0f} Gg CO₂e** (Target NZE DLH: **5.604 Gg CO₂e**; sisa emisi residu tersebut memerlukan mekanisme *carbon offset*)."
+            f"- **Tahun 2030:** Reduksi emisi sektor rumah tangga mencapai **{fmt_id(reduksi_2030, 0)} Gg CO₂e** (**{fmt_id(persen_red_2030, 1)}%** di bawah Baseline 2030).\n"
+            f"- **Tahun 2050:** Emisi rumah tangga berada pada **{fmt_id(residu_2050, 0)} Gg CO₂e**; {ket_2050}"
         )
