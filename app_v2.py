@@ -299,7 +299,7 @@ def muat_semua_data():
     return df_sektor, df_evaluasi, df_aksi, df_jalur
 
 
-df_sektor, df_evaluasi, df_aksi, df_jalur = siapkan_data()
+df_sektor, df_evaluasi, df_aksi, df_jalur = muat_semua_data()
 
 # ==========================================================
 # 2. STATE NAVIGASI HALAMAN (DEFAULT: BERANDA)
